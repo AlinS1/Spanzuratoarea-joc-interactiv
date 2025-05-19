@@ -4,7 +4,6 @@
 #include <avr/io.h>
 #include <stdlib.h>
 #include <string.h>
-#include <util/delay.h>
 
 #define F_CPU 16000000UL
 
@@ -151,9 +150,11 @@ void gpio_init() {
 	PORTC &= ~((1 << LED_G) | (1 << LED_R) | (1 << BUZZER));
 }
 
-void feedback(uint8_t pin) {
+void feedback_on(uint8_t pin) {
 	PORTC |= (1 << pin);
-	_delay_ms(150);
+}
+
+void feedback_off(uint8_t pin) {
 	PORTC &= ~(1 << pin);
 }
 
@@ -275,15 +276,17 @@ void button_select() {
 		}
 	}
 	if (correct) {
-		feedback(LED_G);
+		feedback_on(LED_G);
 		tone(BUZZER, 1000, 150);
 		drawGuessedWord();
+		feedback_off(LED_G);
 	} else {
-		feedback(LED_R);
+		feedback_on(LED_R);
 		tone(BUZZER, 300, 300);
 		wrong_guesses++;
 		drawMistakeCount();
 		drawHangman();
+		feedback_off(LED_R);
 	}
 
 	if (strcmp(guessed_word, hidden_word) == 0) {
