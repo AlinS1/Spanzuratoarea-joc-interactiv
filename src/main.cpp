@@ -211,10 +211,15 @@ void select_random_word() {
 	}
 }
 
+void reset_flags() {
+	flag_left = flag_right = flag_select = false;
+}
+
 // =====================================================================
 // ======================== TIMER FUNCTIONS ============================
 // =====================================================================
 #define DEBOUNCE_TIME_MS 1000
+#define RESET_TIME_S 6
 
 volatile bool debounce_active = false;
 
@@ -224,6 +229,18 @@ void init_timer0_debounce() {
 	OCR0A = (F_CPU / 64 / 1000) * DEBOUNCE_TIME_MS - 1;  // 40ms debounce
 	TIMSK0 |= (1 << OCIE0A);                             // enable în ISR
 	TIMSK0 &= ~(1 << OCIE0A);                            // dezactivat inițial
+}
+
+void init_timer1() {
+	TCCR1A = 0;                                         // CTC mode
+	TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);  // CTC + prescaler 1024
+	TIMSK1 = 0;  // Dezactivăm inițial întreruperea
+	OCR1A = (F_CPU / 1024) * RESET_TIME_S - 1;  // 2s
+}
+
+void start_game_reset_timer() {
+	TCNT1 = 0;                // Reset counter
+	TIMSK1 |= (1 << OCIE1A);  // Activăm întreruperea
 }
 
 // =====================================================================
@@ -271,9 +288,11 @@ void button_select() {
 
 	if (strcmp(guessed_word, hidden_word) == 0) {
 		displayMessage("YOU WIN!", GREEN, 16);
+		start_game_reset_timer();
 	}
 	if (wrong_guesses >= max_wrong_guesses) {
 		displayMessage("GAME OVER!", RED, 8);
+		start_game_reset_timer();
 	}
 }
 
@@ -322,6 +341,24 @@ ISR(TIMER0_COMPA_vect) {
 	PCICR |= (1 << PCIE1);     // reactivează întreruperile
 }
 
+ISR(TIMER1_COMPA_vect) {
+	TIMSK1 &= ~(1 << OCIE1A);  // Oprim întreruperea
+
+	// Resetează jocul
+	wrong_guesses = 0;
+	selected_index = 0;
+	flag_left = false;
+	flag_right = false;
+	flag_select = false;
+
+	select_random_word();
+	my_lcd.Fill_Screen(BLACK);
+	drawGuessedWord();
+	drawLetterRow();
+	drawMistakeCount();
+	drawHangman();
+}
+
 // =====================================================================
 // ============================= MAIN ==================================
 // =====================================================================
@@ -331,6 +368,7 @@ void setup() {
 	init_adc();
 	init_pcint();
 	init_timer0_debounce();
+	init_timer1();
 
 	my_lcd.Init_LCD();
 	my_lcd.Fill_Screen(BLACK);
@@ -345,18 +383,12 @@ void setup() {
 void loop() {
 	if (flag_left) {
 		button_left();
-		flag_left = false;
-		flag_right = false;
-		flag_select = false;
+		reset_flags();
 	} else if (flag_right) {
 		button_right();
-		flag_left = false;
-		flag_right = false;
-		flag_select = false;
+		reset_flags();
 	} else if (flag_select) {
 		button_select();
-		flag_left = false;
-		flag_right = false;
-		flag_select = false;
+		reset_flags();
 	}
 }
