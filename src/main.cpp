@@ -20,7 +20,7 @@
 #define BUTTON_SELECT PC2
 #define LED_G PC3
 #define LED_R PC4
-#define BUZZER PC5
+#define BUZZER 3
 
 // LCD definitions
 #define BLACK 0x0000
@@ -219,7 +219,7 @@ void reset_flags() {
 // ======================== TIMER FUNCTIONS ============================
 // =====================================================================
 #define DEBOUNCE_TIME_MS 1000
-#define RESET_TIME_S 6
+#define RESET_TIME_S 8
 
 volatile bool debounce_active = false;
 
