@@ -11,7 +11,7 @@
  * == Pin definitions ==
  * Buttons: A0 (PC0), A1 (PC1), A2 (PC2)
  * LEDs: A3 (PC3) - GREEN, A4 (PC4) - RED
- * Buzzer: A5 (PC5)
+ * Buzzer: D3 (PD3)
  * LCD: ST7735S via SPI
  */
 #define BUTTON_LEFT PC0
@@ -19,7 +19,7 @@
 #define BUTTON_SELECT PC2
 #define LED_G PC3
 #define LED_R PC4
-#define BUZZER 3
+#define BUZZER PD3
 
 // LCD definitions
 #define BLACK 0x0000
@@ -144,10 +144,12 @@ void gpio_init() {
 	DDRC &= ~((1 << BUTTON_LEFT) | (1 << BUTTON_RIGHT) | (1 << BUTTON_SELECT));
 
 	// Outputs
-	DDRC |= (1 << LED_G) | (1 << LED_R) | (1 << BUZZER);
+	DDRC |= (1 << LED_G) | (1 << LED_R);
+	DDRD |= (1 << BUZZER);
 
 	// Set initial state
-	PORTC &= ~((1 << LED_G) | (1 << LED_R) | (1 << BUZZER));
+	PORTC &= ~((1 << LED_G) | (1 << LED_R));
+	PORTD &= ~(1 << BUZZER);
 }
 
 void feedback_on(uint8_t pin) {
