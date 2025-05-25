@@ -8,11 +8,11 @@
 #define F_CPU 16000000UL
 
 /*
- * == Pin definitions ==
- * Buttons: A0 (PC0), A1 (PC1), A2 (PC2)
- * LEDs: A3 (PC3) - GREEN, A4 (PC4) - RED
+ * == Definitii pentru pini ==
+ * Butoane: A0 (PC0), A1 (PC1), A2 (PC2)
+ * LED-uri: A3 (PC3) - VERDE, A4 (PC4) - ROSU
  * Buzzer: D3 (PD3)
- * LCD: ST7735S via SPI
+ * LCD: ST7735S prin SPI
  */
 #define BUTTON_LEFT PC0
 #define BUTTON_RIGHT PC1
@@ -21,7 +21,7 @@
 #define LED_R PC4
 #define BUZZER PD3
 
-// LCD definitions
+// LCD
 #define BLACK 0x0000
 #define BLUE 0x001F
 #define RED 0xF800
@@ -29,10 +29,12 @@
 #define WHITE 0xFFFF
 #define MODEL ST7735S
 
-LCDWIKI_SPI my_lcd(MODEL, -1, 9, -1, 11, 8, 13, -1);
-// (CS, DC, MISO, MOSI, RST, SCK, LED)
 
-// Global variables
+// Initializare LCD cu SPI hardware
+LCDWIKI_SPI my_lcd(MODEL, -1, 9, 8, -1); // CS, CD, RESET, LED
+
+
+// Variabile globale
 const char *word_list[] = {"ARDUINO", "DISPLAY", "ELECTRON", "MICROBIT",
                            "CODARE"};
 char hidden_word[10];
@@ -45,6 +47,8 @@ int wrong_guesses = 0;
 volatile bool flag_left = false;
 volatile bool flag_right = false;
 volatile bool flag_select = false;
+volatile bool flag_end = false;
+
 
 // =====================================================================
 // ========================= DRAWING FUNCTIONS =========================
@@ -56,34 +60,34 @@ void drawHangman() {
 
 	my_lcd.Set_Draw_color(WHITE);
 
-	// Fixed - base
+	// baza
 	my_lcd.Draw_Line(base_x, base_y, base_x + 20, base_y);
-	// Fixed - pole
+	// stalp
 	my_lcd.Draw_Line(base_x + 10, base_y, base_x + 10, base_y - 60);
-	// Fixed - top beam
+	// bara sus
 	my_lcd.Draw_Line(base_x + 10, base_y - 60, base_x - 20, base_y - 60);
-	// Fixed - rope
+	// franghie
 	my_lcd.Draw_Line(base_x - 20, base_y - 60, base_x - 20, base_y - 50);
 
-	// Drawing based on number of wrong guesses
+
 	if (wrong_guesses > 0) {
-		// Head
+		// cap
 		my_lcd.Draw_Circle(base_x - 20, base_y - 40, 5);
 	}
 	if (wrong_guesses > 1) {
-		// Torso
+		// trunchi
 		my_lcd.Draw_Line(base_x - 20, base_y - 35, base_x - 20, base_y - 15);
 	}
 	if (wrong_guesses > 2) {
-		// Left arm
+		// Brațul stâng
 		my_lcd.Draw_Line(base_x - 20, base_y - 30, base_x - 30, base_y - 25);
-		// Right arm
+		// Brațul drept
 		my_lcd.Draw_Line(base_x - 20, base_y - 30, base_x - 10, base_y - 25);
 	}
 	if (wrong_guesses > 3) {
-		// Left leg
+		// Piciorul stâng
 		my_lcd.Draw_Line(base_x - 20, base_y - 15, base_x - 30, base_y - 5);
-		// Right leg
+		// Piciorul drept
 		my_lcd.Draw_Line(base_x - 20, base_y - 15, base_x - 10, base_y - 5);
 	}
 }
@@ -117,6 +121,14 @@ void drawMistakeCount() {
 	my_lcd.Print_Number_Int(wrong_guesses, 70, 70, 0, ' ', 10);
 }
 
+void displayMessage(const char *msg, int text_colour, int x) {
+	my_lcd.Fill_Screen(BLACK);
+	my_lcd.Set_Text_colour(text_colour);
+	my_lcd.Set_Text_Back_colour(BLACK);
+	my_lcd.Set_Text_Size(2);
+	my_lcd.Print_String(msg, x, 60);
+}
+
 // =====================================================================
 // =========================== ADC FUNCTIONS ===========================
 // =====================================================================
@@ -147,7 +159,7 @@ void gpio_init() {
 	DDRC |= (1 << LED_G) | (1 << LED_R);
 	DDRD |= (1 << BUZZER);
 
-	// Set initial state
+	// Set stari initiale
 	PORTC &= ~((1 << LED_G) | (1 << LED_R));
 	PORTD &= ~(1 << BUZZER);
 }
@@ -164,27 +176,22 @@ uint8_t button_pressed(uint8_t pin) {
 	return (PINC & (1 << pin));
 }
 
-void displayMessage(const char *msg, int text_colour, int x) {
-	my_lcd.Fill_Screen(BLACK);
-	my_lcd.Set_Text_colour(text_colour);
-	my_lcd.Set_Text_Back_colour(BLACK);
-	my_lcd.Set_Text_Size(2);
-	my_lcd.Print_String(msg, x, 60);
-}
 
 void select_random_word() {
 	uint16_t seed = read_adc();
-	srand(seed);  // ADC noise on pin A6
+	srand(seed);  // ADC noise pe pin A6
 	int index = rand() % 5;
 	strcpy(hidden_word, word_list[index]);
 	word_length = strlen(hidden_word);
 
+	// Alegem un caracter de afisat din cuvânt
 	int revealed = rand() % word_length;
 	for (int i = 0; i < word_length; i++) {
 		guessed_word[i] = (i == revealed) ? hidden_word[i] : '_';
 	}
 	guessed_word[word_length] = '\0';
 
+	// Extragem literele unice din cuvântul ales
 	bool used[26] = {false};
 	int count = 0;
 	for (int i = 0; i < word_length && count < 10; i++) {
@@ -194,6 +201,8 @@ void select_random_word() {
 			letters[count++] = hidden_word[i];
 		}
 	}
+
+	// Adaug litere random până la 10
 	while (count < 10) {
 		char r = 'A' + rand() % 26;
 		int idx = r - 'A';
@@ -202,7 +211,8 @@ void select_random_word() {
 			letters[count++] = r;
 		}
 	}
-	// Sort letters alphabetically
+
+	// Sortare litere alfabetic
 	for (int i = 0; i < 9; i++) {
 		for (int j = i + 1; j < 10; j++) {
 			if (letters[i] > letters[j]) {
@@ -222,39 +232,41 @@ void reset_flags() {
 // ======================== TIMER FUNCTIONS ============================
 // =====================================================================
 #define DEBOUNCE_TIME_MS 1000
-#define RESET_TIME_S 8
+#define RESET_TIME_S 2
 
 volatile bool debounce_active = false;
 
 void init_timer0_debounce() {
-	TCCR0A = (1 << WGM01);                               // CTC
-	TCCR0B = (1 << CS01) | (1 << CS00);                  // prescaler 64
-	OCR0A = (F_CPU / 64 / 1000) * DEBOUNCE_TIME_MS - 1;  // 40ms debounce
-	TIMSK0 |= (1 << OCIE0A);                             // enable în ISR
-	TIMSK0 &= ~(1 << OCIE0A);                            // dezactivat inițial
+	TCCR0A = (1 << WGM01);               // CTC
+	TCCR0B = (1 << CS02) | (1 << CS00);  // prescaler 1024
+	OCR0A = 255;                         // Debounce maxim - 16ms (pe o trecere)
+	TIMSK0 &= ~(1 << OCIE0A);            // dezactivat inițial
 }
 
 void init_timer1() {
-	TCCR1A = 0;                                         // CTC mode
-	TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);  // CTC + prescaler 1024
-	TIMSK1 = 0;  // Dezactivăm inițial întreruperea
-	OCR1A = (F_CPU / 1024) * RESET_TIME_S - 1;  // 2s
+	TCCR1A = 0;
+	TCCR1B = (1 << WGM12);  // doar CTC
+	TIMSK1 = 0;
+	OCR1A = (F_CPU / 1024) * RESET_TIME_S - 1;
+	TCNT1 = 0;
 }
 
 void start_game_reset_timer() {
-	TCNT1 = 0;                // Reset counter
-	TIMSK1 |= (1 << OCIE1A);  // Activăm întreruperea
+	TCNT1 = 0;
+	TCCR1B |= (1 << CS12) | (1 << CS10);  // porneste Timer-ul cu prescaler 1024
+	TIMSK1 |= (1 << OCIE1A);              // Activează întreruperea
+	flag_end = true;
 }
 
 // =====================================================================
 // ========================= BUTTON HANDLERS ===========================
 // =====================================================================
 void init_pcint() {
-	// Enable PCINT for port C (PCINT[14:8])
+	// Enable PCINT pe port C (PCINT[14:8])
 	PCICR |= (1 << PCIE1);
 	// Enable PCINT8–10 (PC0–PC2)
 	PCMSK1 |= (1 << PCINT8) | (1 << PCINT9) | (1 << PCINT10);
-	// Enable global interrupts
+	// Enable intreruperi
 	sei();
 }
 
@@ -301,9 +313,14 @@ void button_select() {
 	}
 }
 
+// =====================================================================
+// ======================== INTERRUPT HANDLERS =========================
+// =====================================================================
+
 volatile uint8_t pending_button = 0;
 // 0 = nimic, 1 = left, 2 = right, 3 = select
 
+// Intrerupere pentru butoane
 ISR(PCINT1_vect) {
 	if (debounce_active)
 		return;
@@ -324,30 +341,40 @@ ISR(PCINT1_vect) {
 	TIMSK0 |= (1 << OCIE0A);  // pornește timerul de debounce
 }
 
-ISR(TIMER0_COMPA_vect) {
-	switch (pending_button) {
-		case 1:
-			if (PINC & (1 << PC0))
-				flag_left = true;
-			break;
-		case 2:
-			if (PINC & (1 << PC1))
-				flag_right = true;
-			break;
-		case 3:
-			if (PINC & (1 << PC2))
-				flag_select = true;
-			break;
-	}
+volatile uint8_t debounce_counter = 0;
 
-	pending_button = 0;
-	debounce_active = false;
-	TIMSK0 &= ~(1 << OCIE0A);  // dezactivează temporar Timer0
-	PCICR |= (1 << PCIE1);     // reactivează întreruperile
+// Intrerupere pentru debounce
+ISR(TIMER0_COMPA_vect) {
+	if (++debounce_counter >= 5) {  // 5 * 16ms ≈ 80ms (5 treceri de TIMER0)
+		debounce_counter = 0;
+
+		switch (pending_button) {
+			case 1:
+				if (PINC & (1 << PC0))
+					flag_left = true;
+				break;
+			case 2:
+				if (PINC & (1 << PC1))
+					flag_right = true;
+				break;
+			case 3:
+				if (PINC & (1 << PC2))
+					flag_select = true;
+				break;
+		}
+
+		pending_button = 0;
+		debounce_active = false;
+		TIMSK0 &= ~(1 << OCIE0A);  // dezactivează temporar Timer0
+		PCICR |= (1 << PCIE1);     // reactivează întreruperile
+	}
 }
 
+// Intrerupere pentru resetarea jocului
 ISR(TIMER1_COMPA_vect) {
 	TIMSK1 &= ~(1 << OCIE1A);  // Oprim întreruperea
+
+	flag_end = false;
 
 	// Resetează jocul
 	wrong_guesses = 0;
@@ -356,6 +383,7 @@ ISR(TIMER1_COMPA_vect) {
 	flag_right = false;
 	flag_select = false;
 
+	init_timer1();
 	select_random_word();
 	my_lcd.Fill_Screen(BLACK);
 	drawGuessedWord();
@@ -386,6 +414,9 @@ void setup() {
 }
 
 void loop() {
+	while (flag_end) // Previne apasarea butoanelor in timpul resetarii
+		;
+
 	if (flag_left) {
 		button_left();
 		reset_flags();
