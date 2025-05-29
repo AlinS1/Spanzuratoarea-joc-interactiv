@@ -29,14 +29,17 @@
 #define WHITE 0xFFFF
 #define MODEL ST7735S
 
-
 // Initializare LCD cu SPI hardware
-LCDWIKI_SPI my_lcd(MODEL, -1, 9, 8, -1); // CS, CD, RESET, LED
-
+// D9 (PB1) - CD (Command/Data)
+// D8 (PB0) - RST (Reset)
+// D11 (PB3) - MOSI (Master Out Slave In)
+// D13 (PB5) - SCK (Serial Clock)
+LCDWIKI_SPI my_lcd(MODEL, -1, 9, 8, -1);  // CS, CD, RESET, LED
 
 // Variabile globale
-const char *word_list[] = {"ARDUINO", "DISPLAY", "ELECTRON", "MICROBIT",
-                           "CODARE"};
+const char *word_list[] = {"ARDUINO",  "DISPLAY", "ELECTRON", "LAPTOP",
+                           "COMPUTER", "JAZZ",    "STRICT"};
+const int word_count = sizeof(word_list) / sizeof(word_list[0]);
 char hidden_word[10];
 char guessed_word[10];
 char letters[11];
@@ -48,7 +51,6 @@ volatile bool flag_left = false;
 volatile bool flag_right = false;
 volatile bool flag_select = false;
 volatile bool flag_end = false;
-
 
 // =====================================================================
 // ========================= DRAWING FUNCTIONS =========================
@@ -69,7 +71,6 @@ void drawHangman() {
 	// franghie
 	my_lcd.Draw_Line(base_x - 20, base_y - 60, base_x - 20, base_y - 50);
 
-
 	if (wrong_guesses > 0) {
 		// cap
 		my_lcd.Draw_Circle(base_x - 20, base_y - 40, 5);
@@ -79,13 +80,13 @@ void drawHangman() {
 		my_lcd.Draw_Line(base_x - 20, base_y - 35, base_x - 20, base_y - 15);
 	}
 	if (wrong_guesses > 2) {
-		// Brațul stâng
+		// Bratul stang
 		my_lcd.Draw_Line(base_x - 20, base_y - 30, base_x - 30, base_y - 25);
-		// Brațul drept
+		// Bratul drept
 		my_lcd.Draw_Line(base_x - 20, base_y - 30, base_x - 10, base_y - 25);
 	}
 	if (wrong_guesses > 3) {
-		// Piciorul stâng
+		// Piciorul stang
 		my_lcd.Draw_Line(base_x - 20, base_y - 15, base_x - 30, base_y - 5);
 		// Piciorul drept
 		my_lcd.Draw_Line(base_x - 20, base_y - 15, base_x - 10, base_y - 5);
@@ -141,9 +142,10 @@ void init_adc() {
 }
 
 uint16_t read_adc() {
-	ADCSRA |= (1 << ADSC);  // start conversie
+	ADCSRA |= (1 << ADSC);  // start conversie - Single Conversion Mode
 	while (ADCSRA & (1 << ADSC))
-		;  // așteaptă finalizare
+		;  // asteapta finalizare
+	// ADSC va fi setat pe 0 automat la finalul conversiei
 	return ADC;
 }
 
@@ -176,24 +178,24 @@ uint8_t button_pressed(uint8_t pin) {
 	return (PINC & (1 << pin));
 }
 
-
 void select_random_word() {
-	uint16_t seed = read_adc();
-	srand(seed);  // ADC noise pe pin A6
-	int index = rand() % 5;
+	uint16_t seed = read_adc();  // ADC noise pe pin A6
+	srand(seed);
+	int index = rand() % word_count;
 	strcpy(hidden_word, word_list[index]);
 	word_length = strlen(hidden_word);
 
-	// Alegem un caracter de afisat din cuvânt
+	// Alegem un caracter de afisat din cuvant
 	int revealed = rand() % word_length;
 	for (int i = 0; i < word_length; i++) {
 		guessed_word[i] = (i == revealed) ? hidden_word[i] : '_';
 	}
 	guessed_word[word_length] = '\0';
 
-	// Extragem literele unice din cuvântul ales
+	// Extragem literele unice din cuvantul ales
 	bool used[26] = {false};
 	int count = 0;
+
 	for (int i = 0; i < word_length && count < 10; i++) {
 		int idx = hidden_word[i] - 'A';
 		if (!used[idx]) {
@@ -202,7 +204,7 @@ void select_random_word() {
 		}
 	}
 
-	// Adaug litere random până la 10
+	// Adaug litere random pana la 10
 	while (count < 10) {
 		char r = 'A' + rand() % 26;
 		int idx = r - 'A';
@@ -231,30 +233,30 @@ void reset_flags() {
 // =====================================================================
 // ======================== TIMER FUNCTIONS ============================
 // =====================================================================
-#define DEBOUNCE_TIME_MS 1000
 #define RESET_TIME_S 2
 
 volatile bool debounce_active = false;
 
 void init_timer0_debounce() {
-	TCCR0A = (1 << WGM01);               // CTC
+	TCCR0A = (1 << WGM01);               // CTC (Clear Timer on Compare Match)
 	TCCR0B = (1 << CS02) | (1 << CS00);  // prescaler 1024
 	OCR0A = 255;                         // Debounce maxim - 16ms (pe o trecere)
-	TIMSK0 &= ~(1 << OCIE0A);            // dezactivat inițial
+	                                     // T = (OCR0A + 1) * prescaler / f_CPU
+	TIMSK0 &= ~(1 << OCIE0A);            // dezactivat initial
 }
 
 void init_timer1() {
 	TCCR1A = 0;
-	TCCR1B = (1 << WGM12);  // doar CTC
-	TIMSK1 = 0;
-	OCR1A = (F_CPU / 1024) * RESET_TIME_S - 1;
-	TCNT1 = 0;
+	TCCR1B = (1 << WGM12);  // CTC (CS10 = CS11 = 0 -: Timer/Counter stopped)
+	TIMSK1 = 0;             // dezactivam intreruperea initial
+	OCR1A = (F_CPU / 1024) * RESET_TIME_S - 1;  // val pana la care se numara
+	TCNT1 = 0;                                  // resetam contorul
 }
 
 void start_game_reset_timer() {
-	TCNT1 = 0;
+	TCNT1 = 0;                            // resetam contorul
 	TCCR1B |= (1 << CS12) | (1 << CS10);  // porneste Timer-ul cu prescaler 1024
-	TIMSK1 |= (1 << OCIE1A);              // Activează întreruperea
+	TIMSK1 |= (1 << OCIE1A);              // Activeaza intreruperea
 	flag_end = true;
 }
 
@@ -325,7 +327,7 @@ ISR(PCINT1_vect) {
 	if (debounce_active)
 		return;
 
-	// Detectăm care buton a fost apăsat și setăm doar unul
+	// Detectam care buton a fost apasat si setam doar unul
 	if (PINC & (1 << PC0)) {
 		pending_button = 1;  // left
 	} else if (PINC & (1 << PC1)) {
@@ -333,19 +335,20 @@ ISR(PCINT1_vect) {
 	} else if (PINC & (1 << PC2)) {
 		pending_button = 3;  // select
 	} else {
-		return;  // niciun buton relevant apăsat
+		return;  // niciun buton relevant apasat
 	}
 
 	debounce_active = true;
-	PCICR &= ~(1 << PCIE1);   // dezactivează întreruperile
-	TIMSK0 |= (1 << OCIE0A);  // pornește timerul de debounce
+	PCICR &= ~(1 << PCIE1);   // dezactiveaza intreruperile pe butoane
+	TCNT0 = 0;                // resetam contorul Timer0
+	TIMSK0 |= (1 << OCIE0A);  // porneste intreruperea de debounce
 }
 
 volatile uint8_t debounce_counter = 0;
 
 // Intrerupere pentru debounce
 ISR(TIMER0_COMPA_vect) {
-	if (++debounce_counter >= 5) {  // 5 * 16ms ≈ 80ms (5 treceri de TIMER0)
+	if (++debounce_counter >= 5) {  // 5 treceri de TIMER0 (5 * 16ms ≈ 80ms)
 		debounce_counter = 0;
 
 		switch (pending_button) {
@@ -365,18 +368,16 @@ ISR(TIMER0_COMPA_vect) {
 
 		pending_button = 0;
 		debounce_active = false;
-		TIMSK0 &= ~(1 << OCIE0A);  // dezactivează temporar Timer0
-		PCICR |= (1 << PCIE1);     // reactivează întreruperile
+		TIMSK0 &= ~(1 << OCIE0A);  // dezactiveaza intreruperile pe Timer0
+		PCICR |= (1 << PCIE1);     // reactiveaza intreruperile pe butoane
 	}
 }
 
 // Intrerupere pentru resetarea jocului
 ISR(TIMER1_COMPA_vect) {
-	TIMSK1 &= ~(1 << OCIE1A);  // Oprim întreruperea
+	TIMSK1 &= ~(1 << OCIE1A);  // Oprim intreruperea
 
-	flag_end = false;
-
-	// Resetează jocul
+	// Reseteaza jocul
 	wrong_guesses = 0;
 	selected_index = 0;
 	flag_left = false;
@@ -390,6 +391,8 @@ ISR(TIMER1_COMPA_vect) {
 	drawLetterRow();
 	drawMistakeCount();
 	drawHangman();
+
+	flag_end = false;
 }
 
 // =====================================================================
@@ -414,7 +417,7 @@ void setup() {
 }
 
 void loop() {
-	while (flag_end) // Previne apasarea butoanelor in timpul resetarii
+	while (flag_end)  // Previne apasarea butoanelor in timpul resetarii
 		;
 
 	if (flag_left) {
